@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 圍棋</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>碁</text></svg>">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; color: #1c1e21; display: flex; flex-direction: column; min-height: 100vh; line-height: 1.6; }
+        header { background-color: #333; color: white; padding: 0.8em 1em; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .container { display: flex; flex-grow: 1; padding: 1em; gap: 1em; overflow: hidden; }
+        .config-panel { width: 380px; flex-shrink: 0; background-color: #fff; padding: 1.5em; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 1.2em; max-height: calc(100vh - 2em - 70px); overflow-y: auto; }
+        .game-panel { flex-grow: 1; min-width: 0; background-color: #fff; padding: 1.5em; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); display: flex; flex-direction: column; align-items: center; }
+        .card { background-color: #f7f8fa; padding: 1em; border-radius: 6px; border: 1px solid #dddfe2; }
+        h1 {font-size: 1.5em; margin: 0; text-align: left; flex-grow: 1;}
+        h2 { color: #333; margin-top: 0; margin-bottom: 0.8em; text-align: center;}
+        h3 { color: #4267B2; margin-top: 0; margin-bottom: 0.8em; font-size: 1.1em;}
+        h4 {font-size: 1em; margin-top:0; margin-bottom: 0.5em;}
+
+        label { display: block; margin-bottom: 0.4em; font-weight: 600; color: #4b4f56; font-size: 0.9em; }
+        input[type="text"], input[type="password"], input[type="number"], textarea, select { width: 100%; padding: 0.7em; margin-bottom: 0.5em; border: 1px solid #ccd0d5; border-radius: 4px; font-size: 0.95em; box-sizing: border-box; }
+        textarea { min-height: 60px; resize: vertical; }
+        button { background-color: #4CAF50; color: white; border: none; padding: 0.8em 1.2em; border-radius: 6px; cursor: pointer; font-size: 0.95em; font-weight: 600; transition: background-color 0.2s; width: 100%; margin-top: 0.5em; }
+        button:hover { background-color: #45a049; }
+        button:disabled { background-color: #ccd0d5; color: #8d949e; cursor: not-allowed; }
+        
+        .input-group { display: flex; align-items: center; gap: 0.5em; }
+        .input-group input { flex-grow: 1; margin-bottom: 0; }
+        .input-group button { width: auto; padding: 0.6em 0.8em; font-size: 0.85em; margin-top: 0; background-color: #555; }
+        .input-group button:hover { background-color: #444; }
+
+        .lang-switcher button { background-color: #555; color: white; border: 1px solid #666; padding: 0.4em 0.8em; font-size: 0.8em; margin-left: 5px; width: auto; }
+        .lang-switcher button.active { background-color: #007bff; border-color: #007bff;}
+        .lang-switcher button:hover:not(.active) { background-color: #666; }
+
+        .ai-config-card { border: 1px solid #ddd; padding: 1em; margin-bottom: 1em; border-radius: 5px; background: #f9f9f9; }
+        
+        .score-display { display: flex; justify-content: space-between; margin-bottom: 1em; font-weight: bold; }
+        .score-item { padding: 0.5em; background: #f0f0f0; border-radius: 4px; }
+        
+        #goBoard {
+            width: 450px; 
+            height: 450px;
+            border: 2px solid #8B4513;
+            background-color: #DEB887; 
+            display: grid;
+            grid-template-columns: repeat(19, 1fr);
+            grid-template-rows: repeat(19, 1fr);
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            margin-bottom: 1em;
+            position: relative;
+        }
+        .board-cell { 
+            border: none;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative; 
+        }
+        .board-cell::before, .board-cell::after {
+            content: '';
+            position: absolute;
+            background-color: #8B4513;
+            z-index: 0; 
+        }
+        .board-cell::before { 
+            left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%);
+        }
+        .board-cell::after { 
+            top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%);
+        }
+        
+        /* 星位標記 */
+        .star-point::before {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: #8B4513;
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .board-cell .piece {
+            width: 85%; height: 85%; border-radius: 50%;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 2; 
+        }
+        .board-cell .piece.black { background-color: #1a1a1a; }
+        .board-cell .piece.white { background-color: #f8f8f8; border: 1px solid #666;}
+
+        #gameStatus { font-size: 1.1em; margin-bottom: 1em; font-weight: bold; min-height: 2em; text-align: center; }
+        .loading-indicator { display: none; text-align: center; padding: 1em; }
+        .loading-indicator img { width: 40px; }
+
+        .game-controls { display: flex; gap: 0.5em; margin-bottom: 1em; }
+        .game-controls button { width: auto; padding: 0.5em 1em; font-size: 0.9em; }
+
+        @media (max-width: 860px) {
+            header { flex-direction: column; gap: 0.5em; padding-bottom: 0.5em;}
+            .lang-switcher { margin-top: 0.3em; align-self: flex-end; }
+            .container { flex-direction: column; padding: 0.5em; }
+            .config-panel, .game-panel { width: 100%; box-sizing: border-box; max-height: none; margin-bottom: 1em; }
+            #goBoard { width: 90vw; height: 90vw; max-width: 450px; max-height: 450px;}
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="headerTitle">Gemini 圍棋</h1>
+        <div class="lang-switcher">
+            <button id="langEnBtn">English</button>
+            <button id="langZhBtn">中文</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="config-panel">
+            <div class="card">
+                <h3 id="apiKeyCardTitle">API 金鑰</h3>
+                <div class="input-group">
+                    <input type="password" id="apiKey" placeholder="在此輸入您的 Gemini API 金鑰">
+                    <button id="getApiKeyBtn" title="如何獲取 Gemini API 金鑰">獲取</button>
+                </div>
+                <small id="apiKeyNote" style="font-size:0.8em; color: #555;">此金鑰僅儲存在瀏覽器中。</small>
+            </div>
+
+            <div class="card">
+                <h3 id="gameSettingsTitle">遊戲設定</h3>
+                <label for="gameMode" id="gameModeLabel">遊戲模式:</label>
+                <select id="gameMode">
+                    <option value="pva" id="modePvaOpt">玩家 vs AI</option>
+                    <option value="ava" id="modeAvaOpt">AI vs AI</option>
+                    <option value="pvp" id="modePvpOpt">玩家 vs 玩家 (本地)</option>
+                </select>
+
+                <div id="pvaSettings">
+                    <label for="playerColor" id="playerColorLabel">玩家執子:</label>
+                    <select id="playerColor">
+                        <option value="black" id="playerColorBlackOpt">黑子 (先手)</option>
+                        <option value="white" id="playerColorWhiteOpt">白子 (後手)</option>
+                    </select>
+                </div>
+                 <div id="avaSettings" style="display:none; margin-top:0.5em;">
+                    <label for="avaAutoPlay" id="avaAutoPlayLabel">AI 自動進行:</label>
+                    <select id="avaAutoPlay">
+                        <option value="auto" id="avaAutoOpt">是</option>
+                        <option value="manual" id="avaManualOpt">否 (手動點下一步)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div id="ai1ConfigCard" class="ai-config-card">
+                <h4 id="ai1Title">AI 1 (黑方/玩家對手) 配置</h4>
+                <label for="ai1Model" id="ai1ModelLabel">AI 1 模型:</label>
+                <select id="ai1Model">
+                    <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview (05-20)</option>
+                </select>
+                <label for="ai1Persona" id="ai1PersonaLabel">AI 1 個性/策略提示 (可選):</label>
+                <textarea id="ai1Persona" placeholder="例如：你是一位穩健的圍棋手，重視實地。"></textarea>
+            </div>
+
+            <div id="ai2ConfigCard" class="ai-config-card" style="display:none;">
+                <h4 id="ai2Title">AI 2 (白方) 配置</h4>
+                <label for="ai2Model" id="ai2ModelLabel">AI 2 模型:</label>
+                <select id="ai2Model">
+                    <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview (05-20)</option>
+                </select>
+                <label for="ai2Persona" id="ai2PersonaLabel">AI 2 個性/策略提示 (可選):</label>
+                <textarea id="ai2Persona" placeholder="例如：你是一位積極進攻的圍棋手，重視外勢。"></textarea>
+            </div>
+
+            <button id="startGameBtn">開始遊戲</button>
+            <button id="resetGameBtn" style="display:none; background-color:#f44336;">重置遊戲</button>
+            <button id="nextAIMoveBtn" style="display:none; background-color:#2196F3;">AI 下一步</button>
+
+        </aside>
+
+        <main class="game-panel">
+            <h2 id="boardTitle">圍棋盤</h2>
+            <div class="score-display" id="scoreDisplay" style="display:none;">
+                <div class="score-item">
+                    <span id="blackScoreLabel">黑方:</span> <span id="blackScore">0</span>
+                </div>
+                <div class="score-item">
+                    <span id="whiteScoreLabel">白方:</span> <span id="whiteScore">6.5</span>
+                </div>
+            </div>
+            <div id="gameStatus">請在左側配置並開始遊戲。</div>
+            <div class="loading-indicator" id="loadingIndicator">
+                <p id="loadingText">AI 正在思考中...</p>
+                <img src="https://i.gifer.com/ZZ5H.gif" alt="Loading...">
+            </div>
+            <div id="goBoard">
+                <!-- JavaScript 將在此處生成棋盤格 -->
+            </div>
+            <div class="game-controls" id="gameControls" style="display:none;">
+                <button id="passBtn">虛手</button>
+                <button id="resignBtn">認輸</button>
+                <button id="countBtn">數子</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const apiKeyInput = document.getElementById('apiKey');
+        const getApiKeyBtn = document.getElementById('getApiKeyBtn');
+        const gameModeSelect = document.getElementById('gameMode');
+        const pvaSettingsDiv = document.getElementById('pvaSettings');
+        const avaSettingsDiv = document.getElementById('avaSettings');
+        const avaAutoPlaySelect = document.getElementById('avaAutoPlay');
+        const playerColorSelect = document.getElementById('playerColor');
+        
+        const ai1ConfigCard = document.getElementById('ai1ConfigCard');
+        const ai1ModelSelect = document.getElementById('ai1Model');
+        const ai1PersonaTextarea = document.getElementById('ai1Persona');
+
+        const ai2ConfigCard = document.getElementById('ai2ConfigCard');
+        const ai2ModelSelect = document.getElementById('ai2Model');
+        const ai2PersonaTextarea = document.getElementById('ai2Persona');
+
+        const startGameBtn = document.getElementById('startGameBtn');
+        const resetGameBtn = document.getElementById('resetGameBtn');
+        const nextAIMoveBtn = document.getElementById('nextAIMoveBtn');
+        
+        const gameStatusDiv = document.getElementById('gameStatus');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const goBoardDiv = document.getElementById('goBoard');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const blackScoreSpan = document.getElementById('blackScore');
+        const whiteScoreSpan = document.getElementById('whiteScore');
+        const gameControls = document.getElementById('gameControls');
+        const passBtn = document.getElementById('passBtn');
+        const resignBtn = document.getElementById('resignBtn');
+        const countBtn = document.getElementById('countBtn');
+
+        const langEnBtn = document.getElementById('langEnBtn');
+        const langZhBtn = document.getElementById('langZhBtn');
+
+        // --- Game Variables & State ---
+        const BOARD_SIZE = 19;
+        let board = []; 
+        let currentPlayer = 'black'; 
+        let gameActive = false;
+        let currentGEMINI_API_KEY = '';
+        window.lastInvalidAIMove = null; 
+        let currentLanguage = 'zh';
+        let capturedStones = { black: 0, white: 0 };
+        let consecutivePasses = 0;
+        let gameEnded = false;
+
+        // 星位座標 (19路棋盤)
+        const starPoints = [
+            [3, 3], [3, 9], [3, 15],
+            [9, 3], [9, 9], [9, 15],
+            [15, 3], [15, 9], [15, 15]
+        ];
+
+        // --- Translations ---
+        const translations = {
+            en: {
+                pageTitle: "Gemini Go",
+                headerTitle: "Gemini Go",
+                getApiKeyBtn: "Get",
+                getApiKeyBtnTitle: "How to get a Gemini API Key",
+                apiKeyCardTitle: "API Key",
+                apiKeyPlaceholder: "Enter your Gemini API Key here",
+                apiKeyNote: "This key is only stored in your browser.",
+                gameSettingsTitle: "Game Settings",
+                gameModeLabel: "Game Mode:",
+                modePvaOpt: "Player vs AI",
+                modeAvaOpt: "AI vs AI",
+                modePvpOpt: "Player vs Player (Local)",
+                playerColorLabel: "Your Stone:",
+                playerColorBlackOpt: "Black (First)",
+                playerColorWhiteOpt: "White (Second)",
+                avaAutoPlayLabel: "AI Auto Play:",
+                avaAutoOpt: "Yes",
+                avaManualOpt: "No (Manual Next Step)",
+                ai1TitlePVA: "AI (Opponent) Config",
+                ai1TitleAVA: "AI 1 (Black) Config",
+                ai2Title: "AI 2 (White) Config",
+                aiModelLabel: "Model:",
+                aiPersonaLabel: "Persona/Strategy (Optional):",
+                aiPersonaPlaceholder1: "e.g., You are a solid Go player, focusing on territory.",
+                aiPersonaPlaceholder2: "e.g., You are an aggressive Go player, focusing on influence.",
+                startGameBtn: "Start Game",
+                resetGameBtn: "Reset Game",
+                resetNewGameBtn: "New Game",
+                nextAIMoveBtn: "Next AI Move",
+                boardTitle: "Go Board",
+                initialGameStatus: "Please configure on the left and start the game.",
+                loadingText: "AI is thinking...",
+                playerBlack: "Black",
+                playerWhite: "White",
+                blackScoreLabel: "Black:",
+                whiteScoreLabel: "White:",
+                passBtn: "Pass",
+                resignBtn: "Resign",
+                countBtn: "Count",
+                statusPlayerTurn: "Your turn ({playerColor})",
+                statusPlayerTurnLocal: "{playerColor}'s turn",
+                statusAiThinking: "AI ({playerColor}) is thinking...",
+                statusWin: "{playerColor} wins!",
+                statusWinByResign: "{playerColor} wins by resignation!",
+                statusGameEndBothPass: "Game ended (both players passed). Counting territory...",
+                statusDraw: "It's a draw!",
+                statusErrorApiKey: "Error: API Key not set. AI cannot move.",
+                alertEnterApiKey: "Please enter your Gemini API Key to play against AI.",
+                alertInvalidMove: "Invalid move! This position is already occupied or violates Go rules.",
+                alertSuicide: "Suicide move is not allowed!",
+                alertKo: "Ko rule violation!"
+            },
+            zh: {
+                pageTitle: "Gemini 圍棋",
+                headerTitle: "Gemini 圍棋",
+                getApiKeyBtn: "獲取",
+                getApiKeyBtnTitle: "如何獲取 Gemini API 金鑰",
+                apiKeyCardTitle: "API 金鑰",
+                apiKeyPlaceholder: "在此輸入您的 Gemini API 金鑰",
+                apiKeyNote: "此金鑰僅儲存在瀏覽器中。",
+                gameSettingsTitle: "遊戲設定",
+                gameModeLabel: "遊戲模式:",
+                modePvaOpt: "玩家 vs AI",
+                modeAvaOpt: "AI vs AI",
+                modePvpOpt: "玩家 vs 玩家 (本地)",
+                playerColorLabel: "玩家執子:",
+                playerColorBlackOpt: "黑子 (先手)",
+                playerColorWhiteOpt: "白子 (後手)",
+                avaAutoPlayLabel: "AI 自動進行:",
+                avaAutoOpt: "是",
+                avaManualOpt: "否 (手動點下一步)",
+                ai1TitlePVA: "AI (對手) 配置",
+                ai1TitleAVA: "AI 1 (黑方) 配置",
+                ai2Title: "AI 2 (白方) 配置",
+                aiModelLabel: "AI 模型:",
+                aiPersonaLabel: "AI 個性/策略提示 (可選):",
+                aiPersonaPlaceholder1: "例如：你是一位穩健的圍棋手，重視實地。",
+                aiPersonaPlaceholder2: "例如：你是一位積極進攻的圍棋手，重視外勢。",
+                startGameBtn: "開始遊戲",
+                resetGameBtn: "重置遊戲",
+                resetNewGameBtn: "開始新遊戲",
+                nextAIMoveBtn: "AI 下一步",
+                boardTitle: "圍棋盤",
+                initialGameStatus: "請在左側配置並開始遊戲。",
+                loadingText: "AI 正在思考中...",
+                playerBlack: "黑方",
+                playerWhite: "白方",
+                blackScoreLabel: "黑方:",
+                whiteScoreLabel: "白方:",
+                passBtn: "虛手",
+                resignBtn: "認輸",
+                countBtn: "數子",
+                statusPlayerTurn: "輪到你了 ({playerColor})",
+                statusPlayerTurnLocal: "{playerColor} 落子",
+                statusAiThinking: "AI ({playerColor}) 正在思考...",
+                statusWin: "{playerColor} 勝利!",
+                statusWinByResign: "{playerColor} 認輸獲勝!",
+                statusGameEndBothPass: "遊戲結束 (雙方虛手)。正在計算目數...",
+                statusDraw: "平局!",
+                statusErrorApiKey: "錯誤: API 金鑰未設定。AI 無法行動。",
+                alertEnterApiKey: "請輸入 Gemini API 金鑰才能進行 AI 對戰。",
+                alertInvalidMove: "無效落子！此位置已被佔用或違反圍棋規則。",
+                alertSuicide: "不允許自殺棋！",
+                alertKo: "違反打劫規則！"
+            }
+        };
+
+        function getTranslatedString(key, params = {}) {
+            let str = translations[currentLanguage][key] || key;
+            for (const pKey in params) {
+                str = str.replace(`{${pKey}}`, params[pKey]);
+            }
+            return str;
+        }
+        
+        function getPlayerColorText(player) {
+            return player === 'black' ? getTranslatedString('playerBlack') : getTranslatedString('playerWhite');
+        }
+
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            try { localStorage.setItem('goLanguage', lang); } catch(e) { console.warn("localStorage unavailable for language."); }
+
+            document.documentElement.lang = lang === 'zh' ? 'zh-TW' : 'en';
+            document.title = getTranslatedString('pageTitle');
+
+            // Header
+            document.getElementById('headerTitle').textContent = getTranslatedString('headerTitle');
+            langEnBtn.classList.toggle('active', lang === 'en');
+            langZhBtn.classList.toggle('active', lang === 'zh');
+
+            // Config Panel
+            document.getElementById('apiKeyCardTitle').textContent = getTranslatedString('apiKeyCardTitle');
+            apiKeyInput.placeholder = getTranslatedString('apiKeyPlaceholder');
+            getApiKeyBtn.textContent = getTranslatedString('getApiKeyBtn');
+            getApiKeyBtn.title = getTranslatedString('getApiKeyBtnTitle');
+            document.getElementById('apiKeyNote').textContent = getTranslatedString('apiKeyNote');
+
+            document.getElementById('gameSettingsTitle').textContent = getTranslatedString('gameSettingsTitle');
+            document.getElementById('gameModeLabel').textContent = getTranslatedString('gameModeLabel');
+            document.getElementById('modePvaOpt').textContent = getTranslatedString('modePvaOpt');
+            document.getElementById('modeAvaOpt').textContent = getTranslatedString('modeAvaOpt');
+            document.getElementById('modePvpOpt').textContent = getTranslatedString('modePvpOpt');
+            
+            document.getElementById('playerColorLabel').textContent = getTranslatedString('playerColorLabel');
+            document.getElementById('playerColorBlackOpt').textContent = getTranslatedString('playerColorBlackOpt');
+            document.getElementById('playerColorWhiteOpt').textContent = getTranslatedString('playerColorWhiteOpt');
+            
+            document.getElementById('avaAutoPlayLabel').textContent = getTranslatedString('avaAutoPlayLabel');
+            document.getElementById('avaAutoOpt').textContent = getTranslatedString('avaAutoOpt');
+            document.getElementById('avaManualOpt').textContent = getTranslatedString('avaManualOpt');
+
+            // AI Config
+            document.getElementById('ai1ModelLabel').textContent = getTranslatedString('aiModelLabel');
+            document.getElementById('ai1PersonaLabel').textContent = getTranslatedString('aiPersonaLabel');
+            ai1PersonaTextarea.placeholder = getTranslatedString('aiPersonaPlaceholder1');
+            
+            document.getElementById('ai2ModelLabel').textContent = getTranslatedString('aiModelLabel');
+            document.getElementById('ai2PersonaLabel').textContent = getTranslatedString('aiPersonaLabel');
+            ai2PersonaTextarea.placeholder = getTranslatedString('aiPersonaPlaceholder2');
+            
+            // Buttons
+            startGameBtn.textContent = getTranslatedString('startGameBtn');
+            resetGameBtn.textContent = gameActive ? getTranslatedString('resetGameBtn') : getTranslatedString('resetNewGameBtn');
+            nextAIMoveBtn.textContent = getTranslatedString('nextAIMoveBtn');
+
+            // Game Panel
+            document.getElementById('boardTitle').textContent = getTranslatedString('boardTitle');
+            document.getElementById('loadingText').textContent = getTranslatedString('loadingText');
+            document.getElementById('blackScoreLabel').textContent = getTranslatedString('blackScoreLabel');
+            document.getElementById('whiteScoreLabel').textContent = getTranslatedString('whiteScoreLabel');
+            passBtn.textContent = getTranslatedString('passBtn');
+            resignBtn.textContent = getTranslatedString('resignBtn');
+            countBtn.textContent = getTranslatedString('countBtn');
+            
+            if (!gameActive && gameStatusDiv.textContent === translations.zh.initialGameStatus || gameStatusDiv.textContent === translations.en.initialGameStatus) {
+                 gameStatusDiv.textContent = getTranslatedString('initialGameStatus');
+            }
+            updateAiCardTitles();
+        }
+
+        // --- UI Logic ---
+        function updateAiCardTitles() {
+            const gameMode = gameModeSelect.value;
+            if (gameMode === 'pva') {
+                document.getElementById('ai1Title').textContent = getTranslatedString('ai1TitlePVA');
+            } else if (gameMode === 'ava') {
+                document.getElementById('ai1Title').textContent = getTranslatedString('ai1TitleAVA');
+                document.getElementById('ai2Title').textContent = getTranslatedString('ai2Title');
+            }
+        }
+
+        gameModeSelect.addEventListener('change', function() {
+            const gameMode = this.value;
+            ai1ConfigCard.style.display = 'block'; 
+            updateAiCardTitles();
+
+            if (gameMode === 'pva') {
+                pvaSettingsDiv.style.display = 'block';
+                avaSettingsDiv.style.display = 'none';
+                ai2ConfigCard.style.display = 'none';
+                nextAIMoveBtn.style.display = 'none';
+            } else if (gameMode === 'ava') {
+                pvaSettingsDiv.style.display = 'none';
+                avaSettingsDiv.style.display = 'block';
+                ai2ConfigCard.style.display = 'block';
+                if (avaAutoPlaySelect.value === 'manual') {
+                    nextAIMoveBtn.style.display = 'inline-block';
+                } else {
+                    nextAIMoveBtn.style.display = 'none';
+                }
+            } else { // pvp
+                pvaSettingsDiv.style.display = 'none';
+                avaSettingsDiv.style.display = 'none';
+                ai1ConfigCard.style.display = 'none';
+                ai2ConfigCard.style.display = 'none';
+                nextAIMoveBtn.style.display = 'none';
+            }
+        });
+
+        avaAutoPlaySelect.addEventListener('change', function() {
+            if (gameModeSelect.value === 'ava' && this.value === 'manual') {
+                nextAIMoveBtn.style.display = 'inline-block';
+            } else {
+                nextAIMoveBtn.style.display = 'none';
+            }
+        });
+
+        // --- Go Game Logic ---
+        function initializeBoard() {
+            goBoardDiv.innerHTML = ''; 
+            board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            capturedStones = { black: 0, white: 0 };
+            consecutivePasses = 0;
+            gameEnded = false;
+            
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('board-cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    // 添加星位標記
+                    if (starPoints.some(([sr, sc]) => sr === r && sc === c)) {
+                        cell.classList.add('star-point');
+                    }
+                    
+                    cell.addEventListener('click', handleCellClick);
+                    goBoardDiv.appendChild(cell);
+                }
+            }
+            
+            updateScore();
+            console.log("Go board initialized");
+            goBoardDiv.style.pointerEvents = 'auto'; 
+        }
+
+        function updateScore() {
+            blackScoreSpan.textContent = capturedStones.black;
+            whiteScoreSpan.textContent = capturedStones.white + 6.5; // 貼目
+        }
+
+        function handleCellClick(event) {
+            if (!gameActive || loadingIndicator.style.display === 'block' || gameEnded) return;
+            
+            let targetCell = event.target;
+            if(event.target.classList.contains('piece')) { 
+                targetCell = event.target.parentElement;
+            }
+            if(!targetCell.classList.contains('board-cell')) return; 
+
+            const row = parseInt(targetCell.dataset.row);
+            const col = parseInt(targetCell.dataset.col);
+
+            const gameMode = gameModeSelect.value;
+
+            if (gameMode === 'pvp') {
+                if (isValidMove(row, col, currentPlayer)) {
+                    makeMove(row, col, currentPlayer);
+                    consecutivePasses = 0;
+                    currentPlayer = (currentPlayer === 'black') ? 'white' : 'black';
+                    gameStatusDiv.textContent = getTranslatedString('statusPlayerTurnLocal', { playerColor: getPlayerColorText(currentPlayer) });
+                } else {
+                    alert(getTranslatedString('alertInvalidMove'));
+                }
+            } else if (gameMode === 'pva') {
+                const aiPlayer = playerColorSelect.value === 'black' ? 'white' : 'black';
+                if (currentPlayer !== aiPlayer) {
+                    if (isValidMove(row, col, currentPlayer)) {
+                        makeMove(row, col, currentPlayer);
+                        consecutivePasses = 0;
+                        currentPlayer = aiPlayer; 
+                        gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                        goBoardDiv.style.pointerEvents = 'none';
+                        setTimeout(aiMakeMove, 200); 
+                    } else {
+                        alert(getTranslatedString('alertInvalidMove'));
+                    }
+                }
+            }
+        }
+
+        function isValidMove(row, col, player) {
+            // 檢查位置是否為空
+            if (board[row][col] !== null) return false;
+            
+            // 暫時放置棋子來檢查規則
+            board[row][col] = player;
+            
+            // 檢查是否有氣或能吃子
+            const hasLiberty = hasLiberties(row, col) || canCapture(row, col, player);
+            
+            // 移除暫時放置的棋子
+            board[row][col] = null;
+            
+            return hasLiberty;
+        }
+
+        function hasLiberties(row, col) {
+            const visited = new Set();
+            const stack = [[row, col]];
+            const player = board[row][col];
+            
+            while (stack.length > 0) {
+                const [r, c] = stack.pop();
+                const key = `${r},${c}`;
+                
+                if (visited.has(key)) continue;
+                visited.add(key);
+                
+                // 檢查四個方向
+                for (const [dr, dc] of [[0,1], [0,-1], [1,0], [-1,0]]) {
+                    const nr = r + dr;
+                    const nc = c + dc;
+                    
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (board[nr][nc] === null) {
+                            return true; // 找到氣
+                        } else if (board[nr][nc] === player && !visited.has(`${nr},${nc}`)) {
+                            stack.push([nr, nc]);
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        function canCapture(row, col, player) {
+            const opponent = player === 'black' ? 'white' : 'black';
+            
+            for (const [dr, dc] of [[0,1], [0,-1], [1,0], [-1,0]]) {
+                const nr = row + dr;
+                const nc = col + dc;
+                
+                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                    if (board[nr][nc] === opponent && !hasLiberties(nr, nc)) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        function makeMove(row, col, player) {
+            if (board[row][col] !== null) return false;
+            
+            board[row][col] = player;
+            const cell = goBoardDiv.querySelector(`.board-cell[data-row='${row}'][data-col='${col}']`);
+            if (cell) { 
+                const piece = document.createElement('div');
+                piece.classList.add('piece', player);
+                cell.innerHTML = '';
+                cell.appendChild(piece);
+            }
+            
+            // 處理吃子
+            const opponent = player === 'black' ? 'white' : 'black';
+            let captured = 0;
+            
+            for (const [dr, dc] of [[0,1], [0,-1], [1,0], [-1,0]]) {
+                const nr = row + dr;
+                const nc = col + dc;
+                
+                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                    if (board[nr][nc] === opponent && !hasLiberties(nr, nc)) {
+                        captured += removeGroup(nr, nc);
+                    }
+                }
+            }
+            
+            capturedStones[player] += captured;
+            updateScore();
+            
+            console.log(`${player} placed at ${row},${col}, captured ${captured} stones`);
+            return true;
+        }
+
+        function removeGroup(row, col) {
+            const player = board[row][col];
+            if (player === null) return 0;
+            
+            const toRemove = [];
+            const visited = new Set();
+            const stack = [[row, col]];
+            
+            while (stack.length > 0) {
+                const [r, c] = stack.pop();
+                const key = `${r},${c}`;
+                
+                if (visited.has(key)) continue;
+                visited.add(key);
+                toRemove.push([r, c]);
+                
+                for (const [dr, dc] of [[0,1], [0,-1], [1,0], [-1,0]]) {
+                    const nr = r + dr;
+                    const nc = c + dc;
+                    
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (board[nr][nc] === player && !visited.has(`${nr},${nc}`)) {
+                            stack.push([nr, nc]);
+                        }
+                    }
+                }
+            }
+            
+            // 移除棋子
+            for (const [r, c] of toRemove) {
+                board[r][c] = null;
+                const cell = goBoardDiv.querySelector(`.board-cell[data-row='${r}'][data-col='${c}']`);
+                if (cell) {
+                    cell.innerHTML = '';
+                }
+            }
+            
+            return toRemove.length;
+        }
+
+        function handlePass() {
+            consecutivePasses++;
+            
+            if (consecutivePasses >= 2) {
+                gameEnded = true;
+                gameStatusDiv.textContent = getTranslatedString('statusGameEndBothPass');
+                endGame();
+                return;
+            }
+            
+            currentPlayer = (currentPlayer === 'black') ? 'white' : 'black';
+            
+            const gameMode = gameModeSelect.value;
+            if (gameMode === 'pvp') {
+                gameStatusDiv.textContent = getTranslatedString('statusPlayerTurnLocal', { playerColor: getPlayerColorText(currentPlayer) });
+            } else if (gameMode === 'pva') {
+                const aiPlayer = playerColorSelect.value === 'black' ? 'white' : 'black';
+                if (currentPlayer === aiPlayer) {
+                    gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                    goBoardDiv.style.pointerEvents = 'none';
+                    setTimeout(aiMakeMove, 200);
+                } else {
+                    gameStatusDiv.textContent = getTranslatedString('statusPlayerTurn', { playerColor: getPlayerColorText(currentPlayer) });
+                }
+            }
+        }
+
+        function handleResign() {
+            const winner = currentPlayer === 'black' ? 'white' : 'black';
+            gameStatusDiv.textContent = getTranslatedString('statusWinByResign', { playerColor: getPlayerColorText(winner) });
+            endGame();
+        }
+
+        function endGame() {
+            gameActive = false;
+            gameEnded = true;
+            startGameBtn.style.display = 'block';
+            resetGameBtn.textContent = getTranslatedString('resetNewGameBtn');
+            goBoardDiv.style.pointerEvents = 'auto';
+            gameControls.style.display = 'none';
+        }
+
+        async function aiMakeMove() {
+            currentGEMINI_API_KEY = apiKeyInput.value.trim();
+            if (!currentGEMINI_API_KEY) {
+                gameStatusDiv.textContent = getTranslatedString('statusErrorApiKey');
+                goBoardDiv.style.pointerEvents = 'auto';
+                if(gameModeSelect.value === 'pva') {
+                     const humanPlayer = playerColorSelect.value === 'black' ? 'black' : 'white';
+                     currentPlayer = humanPlayer;
+                     gameStatusDiv.textContent = getTranslatedString('statusPlayerTurn', { playerColor: getPlayerColorText(humanPlayer) });
+                }
+                return;
+            }
+
+            let aiModel, aiPersona;
+            const gameMode = gameModeSelect.value;
+            
+            if (gameMode === 'pva') {
+                aiModel = ai1ModelSelect.value;
+                aiPersona = ai1PersonaTextarea.value;
+            } else if (gameMode === 'ava') {
+                if (currentPlayer === 'black') { 
+                    aiModel = ai1ModelSelect.value;
+                    aiPersona = ai1PersonaTextarea.value;
+                } else { 
+                    aiModel = ai2ModelSelect.value;
+                    aiPersona = ai2PersonaTextarea.value;
+                }
+            } else {
+                return; 
+            }
+
+            loadingIndicator.style.display = 'block';
+            goBoardDiv.style.pointerEvents = 'none'; 
+            
+            let attempts = 0;
+            const MAX_ATTEMPTS = 3; 
+
+            try {
+                while (attempts < MAX_ATTEMPTS) {
+                    attempts++;
+                    
+                    let boardString = "當前圍棋盤狀態 (你是 "+(currentPlayer === 'black' ? 'X (黑子)' : 'O (白子)')+", 對手是 "+(currentPlayer === 'black' ? 'O (白子)' : 'X (黑子)')+", '.' 代表空格):\n";
+                    boardString += "   0 1 2 3 4 5 6 7 8 9 A B C D E F G H I\n"; 
+                    for(let r=0; r<BOARD_SIZE; r++) {
+                        boardString += (r < 10 ? ' ' + r : String.fromCharCode('A'.charCodeAt(0) + r - 10)) + " "; 
+                        for(let c=0; c<BOARD_SIZE; c++) {
+                            boardString += (board[r][c] === 'black' ? 'X' : board[r][c] === 'white' ? 'O' : '.') + " ";
+                        }
+                        boardString += "\n";
+                    }
+                    
+                    let currentAttemptPrompt = `
+你是一位圍棋AI。${aiPersona || "你的目標是贏得比賽。"}
+圍棋規則：
+1. 黑子先行，雙方輪流在棋盤交叉點落子
+2. 棋子落下後不能移動
+3. 被包圍且無氣的棋子會被提取
+4. 不能下自殺棋（除非能同時吃掉對方棋子）
+5. 不能違反打劫規則
+6. 可以選擇虛手(pass)
+7. 雙方連續虛手則遊戲結束，計算目數決定勝負
+
+當前局面：
+${boardString}
+目前被吃子數 - 黑方: ${capturedStones.black}, 白方: ${capturedStones.white}
+連續虛手次數: ${consecutivePasses}
+
+現在輪到你 (${currentPlayer === 'black' ? '黑子 X' : '白子 O'}) 落子。
+請仔細分析棋盤，選擇一個最佳的落子點或虛手。
+
+你的回應必須且只能是JSON格式：
+- 落子: {"move": {"row": 行數, "col": 列數}}
+- 虛手: {"move": "pass"}
+
+例如: {"move": {"row": 3, "col": 3}} 或 {"move": "pass"}
+不要返回任何其他文字或解釋。`;
+
+                    if (attempts > 1 && window.lastInvalidAIMove && window.lastInvalidAIMove.reason) {
+                        let retryHint = `重要提示：你上一次嘗試的落子 `;
+                        if (typeof window.lastInvalidAIMove.row === 'number' && typeof window.lastInvalidAIMove.col === 'number') {
+                            retryHint += `(${window.lastInvalidAIMove.row},${window.lastInvalidAIMove.col}) `;
+                        }
+                        retryHint += `是無效的，因為 ${window.lastInvalidAIMove.reason}。請重新選擇一個有效的位置或選擇虛手。`;
+                        currentAttemptPrompt += `\n${retryHint}`;
+                    }
+
+                    console.log(`AI Prompt for ${currentPlayer} (Attempt ${attempts}/${MAX_ATTEMPTS}):`, currentAttemptPrompt);
+                    
+                    try { 
+                        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent?key=${currentGEMINI_API_KEY}`;
+                        
+                        const response = await fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: currentAttemptPrompt }] }],
+                                generationConfig: {
+                                    responseMimeType: "application/json",
+                                }
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ error: { message: "無法解析API錯誤回應" } }));
+                            const apiError = new Error(`API 請求失敗 (${response.status}): ${errorData.error?.message || response.statusText}`);
+                            apiError.statusCode = response.status;
+                            throw apiError;
+                        }
+
+                        const data = await response.json();
+                        console.log("AI Response Data (Attempt " + attempts + "):", data);
+                        
+                        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
+                            const aiResponseText = data.candidates[0].content.parts[0].text;
+                            let aiMoveObj;
+                            try {
+                                aiMoveObj = JSON.parse(aiResponseText);
+                            } catch (parseError) {
+                                console.error("AI 回應JSON解析錯誤:", parseError, "原始回應:", aiResponseText);
+                                window.lastInvalidAIMove = { reason: "回應不是有效的JSON格式" };
+                                if (attempts < MAX_ATTEMPTS) {
+                                    gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 回應格式錯誤，正在重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                                    await new Promise(resolve => setTimeout(resolve, 1000 + attempts * 200)); 
+                                    continue; 
+                                } else {
+                                    throw new Error(`AI (${getPlayerColorText(currentPlayer)}) 回應解析錯誤。最後: ${aiResponseText.substring(0,100)}`);
+                                }
+                            }
+                            
+                            // 處理虛手
+                            if (aiMoveObj.move === "pass") {
+                                consecutivePasses++;
+                                window.lastInvalidAIMove = null;
+                                
+                                if (consecutivePasses >= 2) {
+                                    gameEnded = true;
+                                    gameStatusDiv.textContent = getTranslatedString('statusGameEndBothPass');
+                                    endGame();
+                                    return;
+                                }
+                                
+                                if (gameMode === 'pva') {
+                                    currentPlayer = (playerColorSelect.value === 'black' ? 'black' : 'white'); 
+                                    gameStatusDiv.textContent = getTranslatedString('statusPlayerTurn', { playerColor: getPlayerColorText(currentPlayer) });
+                                    goBoardDiv.style.pointerEvents = 'auto';
+                                } else if (gameMode === 'ava') {
+                                    currentPlayer = (currentPlayer === 'black' ? 'white' : 'black');
+                                    gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                                    if (avaAutoPlaySelect.value === 'auto') { 
+                                        setTimeout(aiMakeMove, 1000); 
+                                    } else {
+                                        goBoardDiv.style.pointerEvents = 'none'; 
+                                    }
+                                }
+                                return;
+                            }
+                            
+                            // 處理落子
+                            if (aiMoveObj.move && typeof aiMoveObj.move.row === 'number' && typeof aiMoveObj.move.col === 'number') {
+                                const aiRow = aiMoveObj.move.row;
+                                const aiCol = aiMoveObj.move.col;
+
+                                if (aiRow >= 0 && aiRow < BOARD_SIZE && aiCol >= 0 && aiCol < BOARD_SIZE && isValidMove(aiRow, aiCol, currentPlayer)) {
+                                    makeMove(aiRow, aiCol, currentPlayer);
+                                    consecutivePasses = 0;
+                                    window.lastInvalidAIMove = null; 
+                                    
+                                    if (gameMode === 'pva') {
+                                        currentPlayer = (playerColorSelect.value === 'black' ? 'black' : 'white'); 
+                                        gameStatusDiv.textContent = getTranslatedString('statusPlayerTurn', { playerColor: getPlayerColorText(currentPlayer) });
+                                        goBoardDiv.style.pointerEvents = 'auto';
+                                    } else if (gameMode === 'ava') {
+                                        currentPlayer = (currentPlayer === 'black' ? 'white' : 'black');
+                                        gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                                        if (avaAutoPlaySelect.value === 'auto') { 
+                                            setTimeout(aiMakeMove, 1000); 
+                                        } else {
+                                            goBoardDiv.style.pointerEvents = 'none'; 
+                                        }
+                                    }
+                                    return; 
+                                } else {
+                                    let reason = "位置超出邊界";
+                                    if (aiRow >= 0 && aiRow < BOARD_SIZE && aiCol >= 0 && aiCol < BOARD_SIZE) {
+                                        if (board[aiRow][aiCol] !== null) {
+                                            reason = `位置 (${aiRow},${aiCol}) 已被佔用`;
+                                        } else {
+                                            reason = `位置 (${aiRow},${aiCol}) 違反圍棋規則（可能是自殺棋或打劫）`;
+                                        }
+                                    } else {
+                                        reason = `位置 (${aiRow},${aiCol}) 超出棋盤邊界 (${BOARD_SIZE-1},${BOARD_SIZE-1}內)`;
+                                    }
+                                    window.lastInvalidAIMove = { row: aiRow, col: aiCol, reason: reason };
+                                    console.warn(`AI (${currentPlayer}) 第 ${attempts} 次嘗試落子 (${aiRow},${aiCol}) 無效: ${reason}`);
+                                    if (attempts < MAX_ATTEMPTS) {
+                                        gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 落子無效，正在重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                                        await new Promise(resolve => setTimeout(resolve, 1000 + attempts * 200)); 
+                                        continue; 
+                                    } else {
+                                        throw new Error(`AI 連續 ${MAX_ATTEMPTS} 次返回無效棋位。最後嘗試: (${aiRow},${aiCol}) - ${reason}`);
+                                    }
+                                }
+                            } else {
+                                window.lastInvalidAIMove = { reason: "回應JSON結構不正確 (缺少 move 或格式錯誤)" };
+                                console.error("AI 回應格式不正確。原始回應:", aiResponseText);
+                                if (attempts < MAX_ATTEMPTS) {
+                                    gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 回應格式錯誤，正在重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                                    await new Promise(resolve => setTimeout(resolve, 1000 + attempts * 200));
+                                    continue; 
+                                } else {
+                                    throw new Error(`AI (${getPlayerColorText(currentPlayer)}) 回應解析錯誤。最後: ${aiResponseText.substring(0,100)}`);
+                                }
+                            }
+                        } else {
+                             window.lastInvalidAIMove = { reason: "API回應中未找到有效的候選內容(candidates)" };
+                             console.error("AI 未能生成有效內容，candidates[] 為空或不存在。", data);
+                             if (attempts < MAX_ATTEMPTS) {
+                                gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 未能生成內容，正在重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                                await new Promise(resolve => setTimeout(resolve, 1000 + attempts * 200)); 
+                                continue; 
+                             } else {
+                                throw new Error("AI 多次未能生成有效內容。");
+                             }
+                        }
+                    } catch (errorInAttempt) { 
+                        console.error(`AI 行動錯誤 (Attempt ${attempts}/${MAX_ATTEMPTS}):`, errorInAttempt);
+                        window.lastInvalidAIMove = { reason: `處理時發生錯誤: ${errorInAttempt.message.substring(0,60)}...` };
+
+                        if (errorInAttempt.statusCode && errorInAttempt.statusCode >= 400 && errorInAttempt.statusCode < 500 && errorInAttempt.statusCode !== 429) {
+                            gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) API 嚴重錯誤: ${errorInAttempt.message}`;
+                            throw errorInAttempt; 
+                        }
+
+                        if (attempts < MAX_ATTEMPTS) {
+                            let waitTime = 1000 + attempts * 500; 
+                            if(errorInAttempt.statusCode === 429) { 
+                                const seconds = Math.round((5000 + attempts * 1000)/1000);
+                                gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 達到速率限制，${seconds}秒後重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                                waitTime = 5000 + attempts * 1000; 
+                            } else {
+                                gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) API 錯誤，正在重試 (${attempts}/${MAX_ATTEMPTS})...`;
+                            }
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
+                        } else {
+                            throw new Error(`AI 在第 ${attempts} 次嘗試中因錯誤 (${errorInAttempt.message.substring(0,60)}) 失敗。`);
+                        }
+                    }
+                } 
+                gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 未能在 ${MAX_ATTEMPTS} 次嘗試後完成有效行動。`;
+                handleAiFailure(); 
+
+            } catch (finalError) { 
+                console.error("AI最終行動失敗:", finalError);
+                if (!gameStatusDiv.textContent.includes('勝利') && !gameStatusDiv.textContent.includes('wins')) {
+                     gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 行動失敗: ${finalError.message.substring(0, 100)}`;
+                }
+                handleAiFailure();
+            } finally {
+                loadingIndicator.style.display = 'none'; 
+            }
+        }
+
+        function handleAiFailure() {
+            loadingIndicator.style.display = 'none'; 
+            goBoardDiv.style.pointerEvents = 'auto'; 
+            const gameMode = gameModeSelect.value;
+
+            if (gameMode === 'pva') { 
+                const humanPlayer = playerColorSelect.value === 'black' ? 'black' : 'white';
+                currentPlayer = humanPlayer; 
+                gameStatusDiv.textContent = `AI 出錯多次，輪到你了 (${getPlayerColorText(humanPlayer)})。`;
+            } else if (gameMode === 'ava') {
+                if (avaAutoPlaySelect.value === 'manual') {
+                    gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 出錯多次。請手動嘗試下一步或重置遊戲。`;
+                } else { 
+                    gameStatusDiv.textContent = `AI (${getPlayerColorText(currentPlayer)}) 出錯多次，遊戲自動進行可能已停止。`;
+                }
+            }
+            window.lastInvalidAIMove = null;
+        }
+
+        // --- Event Listeners ---
+        getApiKeyBtn.addEventListener('click', () => {
+            window.open('https://aistudio.google.com/app/apikey', '_blank');
+        });
+
+        langEnBtn.addEventListener('click', () => setLanguage('en'));
+        langZhBtn.addEventListener('click', () => setLanguage('zh'));
+
+        passBtn.addEventListener('click', handlePass);
+        resignBtn.addEventListener('click', handleResign);
+        countBtn.addEventListener('click', () => {
+            // 簡單的計算 - 實際圍棋計算會更複雜
+            alert('計算功能尚未實現。請手動計算目數。');
+        });
+
+        startGameBtn.addEventListener('click', () => {
+            currentGEMINI_API_KEY = apiKeyInput.value.trim();
+            const gameMode = gameModeSelect.value;
+
+            if (gameMode !== 'pvp' && !currentGEMINI_API_KEY) {
+                alert(getTranslatedString('alertEnterApiKey'));
+                apiKeyInput.focus();
+                return;
+            }
+
+            initializeBoard();
+            gameActive = true;
+            gameEnded = false;
+            startGameBtn.style.display = 'none';
+            resetGameBtn.style.display = 'inline-block';
+            resetGameBtn.textContent = getTranslatedString('resetGameBtn');
+            scoreDisplay.style.display = 'flex';
+            gameControls.style.display = 'flex';
+            window.lastInvalidAIMove = null; 
+            
+            if (gameMode === 'ava' && avaAutoPlaySelect.value === 'manual') {
+                nextAIMoveBtn.style.display = 'inline-block'; 
+            } else {
+                nextAIMoveBtn.style.display = 'none';
+            }
+
+            if (gameMode === 'pvp') {
+                currentPlayer = 'black'; 
+                gameStatusDiv.textContent = getTranslatedString('statusPlayerTurnLocal', { playerColor: getPlayerColorText(currentPlayer) });
+                goBoardDiv.style.pointerEvents = 'auto';
+            } else if (gameMode === 'pva') {
+                const playerIsBlack = playerColorSelect.value === 'black';
+                currentPlayer = 'black'; 
+                if (playerIsBlack) {
+                    gameStatusDiv.textContent = getTranslatedString('statusPlayerTurn', { playerColor: getPlayerColorText(currentPlayer) });
+                    goBoardDiv.style.pointerEvents = 'auto';
+                } else {
+                    gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                    goBoardDiv.style.pointerEvents = 'none';
+                    setTimeout(aiMakeMove, 200); 
+                }
+            } else if (gameMode === 'ava') {
+                currentPlayer = 'black'; 
+                gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                goBoardDiv.style.pointerEvents = 'none'; 
+                setTimeout(aiMakeMove, 200); 
+            }
+        });
+
+        resetGameBtn.addEventListener('click', () => {
+            gameActive = false; 
+            gameEnded = false;
+            gameStatusDiv.textContent = getTranslatedString('initialGameStatus');
+            startGameBtn.style.display = 'block';
+            resetGameBtn.style.display = 'none';
+            nextAIMoveBtn.style.display = 'none';
+            scoreDisplay.style.display = 'none';
+            gameControls.style.display = 'none';
+            
+            initializeBoard(); 
+            window.lastInvalidAIMove = null; 
+        });
+        
+        nextAIMoveBtn.addEventListener('click', () => {
+            if (gameActive && !gameEnded && gameModeSelect.value === 'ava' && avaAutoPlaySelect.value === 'manual' && loadingIndicator.style.display === 'none') {
+                gameStatusDiv.textContent = getTranslatedString('statusAiThinking', { playerColor: getPlayerColorText(currentPlayer) });
+                aiMakeMove();
+            }
+        });
+
+        // Initial setup
+        try {
+            const preferredLang = localStorage.getItem('goLanguage');
+            if (preferredLang && translations[preferredLang]) {
+                currentLanguage = preferredLang;
+            }
+        } catch(e) { console.warn("localStorage unavailable for language preference.");}
+        
+        setLanguage(currentLanguage);
+        initializeBoard();
+        gameModeSelect.dispatchEvent(new Event('change'));
+
+    </script>
+</body>
+</html>
